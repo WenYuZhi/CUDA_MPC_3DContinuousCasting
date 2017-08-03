@@ -18,9 +18,7 @@ float ccml[Section + 1] = { 0.0,0.2,0.4,0.6,0.8,1.0925,2.27,4.29,5.831,9.6065,13
 float H_Init[Section] = { 1380,1170,980,800,1223.16,735.05,424.32,392.83,328.94,281.64,246.16,160.96 };  // The heat transfer coefficients in the cooling sections
 float H_Init_Temp[Section] = { 1380,1170,980,800,1223.16,735.05,424.32,392.83,328.94,281.64,246.16,160.96 };  // The heat transfer coefficients in the cooling sections
 float Taim[CoolSection] = { 966.149841, 925.864746, 952.322083, 932.175537, 914.607117, 890.494263, 870.804443, 890.595825 };
-float *Mean_TSurface;
-
-void Calculation_MeanTemperature(int nx, int ny, int nz, float dy, float *ccml, float *T);
+float *Calculation_MeanTemperature(int nx, int ny, int nz, float dy, float *ccml, float *T);
 cudaError_t addWithCuda(float *T_Init, float dx, float dy, float dz, float tao, int nx, int ny, int nz, int tnpts, int num_blocks, int num_threadsx, int num_threadsy);
 __device__ void Physicial_Parameters(float T, float *pho, float *Ce, float *lamd);
 __device__ float Boundary_Condition(int j, float dx, float *ccml_zone, float *H_Init);
@@ -535,8 +533,6 @@ int main()
 	float *T_Init;
 
 	T_Init = (float *)calloc(nx * ny * nz, sizeof(float));  // Initial condition
-	Mean_TSurface = (float*)calloc(Section, sizeof(float));
-
 	num_threadsx = nx;
 	num_threadsy = nz;
 	num_blocks = ny;
@@ -641,7 +637,7 @@ cudaError_t addWithCuda(float *T_Init, float dx, float dy, float dz, float tao, 
 					}
 
 					HANDLE_ERROR(cudaMemcpy(T_Result, dev_T_New, nx * ny * nz * sizeof(float), cudaMemcpyDeviceToHost));
-					Calculation_MeanTemperature(nx, ny, nz, dy, ccml, T_Result);  // calculation the mean surface temperature of steel billets in every cooling sections
+					float* Mean_TSurface = Calculation_MeanTemperature(nx, ny, nz, dy, ccml, T_Result);  // calculation the mean surface temperature of steel billets in every cooling sections
 					for (int temp = 0; temp < CoolSection; temp++)
 						for (int column = 0; column < CoolSection; column++)
 							Mean_TSurfaceElementOne[temp][column] = Mean_TSurface[column + MoldSection];
@@ -661,7 +657,7 @@ cudaError_t addWithCuda(float *T_Init, float dx, float dy, float dz, float tao, 
 					}
 
 					HANDLE_ERROR(cudaMemcpy(T_Result, dev_T_New, nx * ny * nz * sizeof(float), cudaMemcpyDeviceToHost));
-					Calculation_MeanTemperature(nx, ny, nz, dy, ccml, T_Result); // calculation the mean surface temperature of steel billets in every cooling sections
+					float* Mean_TSurface = Calculation_MeanTemperature(nx, ny, nz, dy, ccml, T_Result); // calculation the mean surface temperature of steel billets in every cooling sections
 					for (int column = 0; column < CoolSection; column++)
 						Mean_TSurfaceElement[m][column] = Mean_TSurface[column + MoldSection];
 				}
@@ -704,7 +700,7 @@ cudaError_t addWithCuda(float *T_Init, float dx, float dy, float dz, float tao, 
 		if (i % (10 * Num_Iter) == 0)
 		{
 			HANDLE_ERROR(cudaMemcpy(T_Result, dev_T_Last, nx * ny * nz* sizeof(float), cudaMemcpyDeviceToHost));
-			Calculation_MeanTemperature(nx, ny, nz, dy, ccml, T_Result);  // calculation the mean surface temperature of steel billets in every cooling sections
+			float* Mean_TSurface = Calculation_MeanTemperature(nx, ny, nz, dy, ccml, T_Result);  // calculation the mean surface temperature of steel billets in every cooling sections
 		
 				cout << "time_step = " << i <<",  "<< "simulation time = " << i * tao;
 				cout << endl << "TSurface = " << endl;
@@ -806,12 +802,14 @@ __device__ float Boundary_Condition(int j, float dy, float *ccml_zone, float *H_
 	return h;
 }
 
-void Calculation_MeanTemperature(int nx, int ny, int nz, float dy, float *ccml, float *T)
+float* Calculation_MeanTemperature(int nx, int ny, int nz, float dy, float *ccml, float *T)
 {
 	float y;
 	int count = 0;
 	int i = 0;
 	
+	float* Mean_TSurface;
+	Mean_TSurface = new float[Section];
 	for (int i = 0; i < Section; i++)
 	{
 		Mean_TSurface[i] = 0.0;
@@ -827,4 +825,5 @@ void Calculation_MeanTemperature(int nx, int ny, int nz, float dy, float *ccml, 
 		Mean_TSurface[i] = Mean_TSurface[i] / float(count);
 		count = 0;
 	}
+	return Mean_TSurface;
 }
