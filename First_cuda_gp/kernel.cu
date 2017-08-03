@@ -3,11 +3,13 @@
 #include "device_launch_parameters.h"
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
+#include <cstdlib>
+#include <ctime>
+#include <iostream>
+#include <fstream>
 #include "book.h"
 #include "gridcheck.h"
-
+using namespace std;
 # define Section 12  // number of cooling sections
 # define CoolSection 8
 # define MoldSection 4
@@ -524,7 +526,6 @@ __global__ void addKernel(float *T_New, float *T_Last, float *ccml, float *H_Ini
 		}
 	}
 }
-
 int main()
 {
 	const int nx = 21, ny = 3000, nz = 21;   // nx is the number of grid in x direction, ny is the number of grid in y direction.
@@ -551,20 +552,15 @@ int main()
 	tao = t_final / (tnpts - 1);   // the time step size
 	//gridcheck(dx, dy, tao);
 
-	printf("Casting Temperature = %f ", T_Cast);
-	printf("\n");
-	printf("The thick of steel billets(m) = %f ", Lx);
-	printf("\n");
-	printf("The length of steel billets(m) = %f ", Ly);
-	printf("\n");
-	printf("The length of steel billets(m) = %f ", Lz);
-	printf("\n");
-	printf("dx(m) = %f ", dx);
-	printf("dy(m) = %f ", dy);
-	printf("dz(m) = %f ", dz);
-	printf("tao(s) = %f ", tao);
-	printf("\n");
-	printf("simulation time(s) = %f\n ", t_final);
+	cout << "Casting Temperature " << T_Cast << endl;
+	cout << "The length of steel billets(m) " << Ly << endl;
+	cout << "The width of steel billets(m) " << Lz << endl;
+	cout << "The thick of steel billets(m) " << Lx << endl;
+	cout << "dx(m) " << dx << ", ";
+	cout << "dy(m) " << dy << ", ";
+	cout << "dz(m) " << dz << ", ";
+	cout << "tao(s) " << tao << ", ";
+	cout << "simulation time(s) " << t_final << endl;
 
 	clock_t timestart = clock();
 	cudaError_t cudaStatus = addWithCuda(T_Init, dx, dy, dz, tao, nx, ny, nz, tnpts, num_blocks, num_threadsx, num_threadsy);
@@ -574,7 +570,7 @@ int main()
 	}
 	clock_t timeend = clock();
 
-	printf("running time = %d(millisecond)", (timeend - timestart));
+	cout << "running time = " << (timeend - timestart);
 
 	// cudaDeviceReset must be called before exiting in order for profiling and
 	// tracing tools such as Nsight and Visual Profiler to show complete traces.
@@ -594,7 +590,6 @@ cudaError_t addWithCuda(float *T_Init, float dx, float dy, float dz, float tao, 
 	float dh = 10.0, arf1, arf2, step = -0.0001;
 	const int Num_Iter = 10, PrintLabel = 0;                         // The result can be obtained by every Num_Iter time step
 	volatile bool dstOut = true;
-	FILE *fp = NULL;
 
 	T_Result = (float *)calloc(nx * ny * nz, sizeof(float)); // The temperature of steel billets
 	Delta_H_Init = (float*)calloc(CoolSection, sizeof(float));
@@ -626,8 +621,6 @@ cudaError_t addWithCuda(float *T_Init, float dx, float dy, float dz, float tao, 
 	HANDLE_ERROR(cudaMemcpy(dev_H_Init, H_Init, Section * sizeof(float), cudaMemcpyHostToDevice));
 
 	dim3 threadsPerBlock(num_threadsx, num_threadsy);
-	//dim3 numBlocks(num_blocks);
-	// Launch a kernel on the GPU with one thread for each element.
 
 	for (int i = 0; i < tnpts; i++)
 	{
@@ -675,62 +668,17 @@ cudaError_t addWithCuda(float *T_Init, float dx, float dy, float dz, float tao, 
 				HANDLE_ERROR(cudaMemcpy(dev_T_Last, T_HoldLast, nx * ny * nz * sizeof(float), cudaMemcpyHostToDevice));
 			}
 
-			if(PrintLabel==1)
-			{
-				printf("\n");
-				printf("Mean_TSurfaceElement \n");
-			}
-			
 			for (int row = 0; row < CoolSection; row++)
-			{
 				for (int column = 0; column < CoolSection; column++)
-					if (PrintLabel == 1)
-						printf("%f ", Mean_TSurfaceElement[row][column]);
-				if (PrintLabel == 1)
-					printf("\n");
-			}
-
-			if (PrintLabel == 1)
-			{
-				printf("\n");
-				printf("Mean_TSurfaceElementOne \n ");
-			}
-			
-			for (int row = 0; row < CoolSection; row++)
-			{
-				for (int column = 0; column < CoolSection; column++)
-					if (PrintLabel == 1)
-						printf("%f ", Mean_TSurfaceElementOne[row][column]);
-				if (PrintLabel == 1)
-					printf("\n");
-			}
-
-			if (PrintLabel == 1)
-				printf("\nJacobianMatrix=\n");
-			for (int row = 0; row < CoolSection; row++)
-			{
-				for (int column = 0; column < CoolSection; column++)
-				{
 					JacobianMatrix[row][column] = (Mean_TSurfaceElement[row][column] - Mean_TSurfaceElementOne[row][column]) / dh;
-					if (PrintLabel == 1)
-						printf("%f ", JacobianMatrix[row][column]);
-				}
-				if (PrintLabel == 1)
-					printf("\n");
-			}
 
 			for (int temp = 0; temp < CoolSection; temp++)
 				Delta_H_Init[temp] = 0.0;
 
-			if (PrintLabel == 1)
-				printf("\nDelta_H_Init=\n");
 			for (int temp = 0; temp < CoolSection; temp++)
-			{
 				for (int column = 0; column < CoolSection; column++)
 					Delta_H_Init[temp] += (Mean_TSurfaceElementOne[temp][column] - Taim[column]) * JacobianMatrix[temp][column];
-				if (PrintLabel == 1)
-					printf(" %f, ", Delta_H_Init[temp]);
-			}
+				
 
 			arf1 = 0.0, arf2 = 0.0;
 			for (int temp = 0; temp < CoolSection; temp++)
@@ -741,7 +689,7 @@ cudaError_t addWithCuda(float *T_Init, float dx, float dy, float dz, float tao, 
 					arf2 += JacobianMatrix[temp][column] * Delta_H_Init[column] * JacobianMatrix[temp][column] * Delta_H_Init[column];
 				}
 			}
-			step = -arf1 / (arf2);
+			step = -arf1 / ((arf2) + 0.001);
 
 			for (int temp = 0; temp < CoolSection; temp++)
 				H_Init[temp + MoldSection] += step *(Delta_H_Init[temp]);
@@ -753,48 +701,44 @@ cudaError_t addWithCuda(float *T_Init, float dx, float dy, float dz, float tao, 
 		addKernel << <num_blocks, threadsPerBlock >> >(dev_T_New, dev_T_Last, dev_ccml, dev_H_Init, dx, dy, dz, tao, nx, ny, nz, dstOut);
 		dstOut = !dstOut;
 
-		if (i % Num_Iter == 0)
+		if (i % (10 * Num_Iter) == 0)
 		{
 			HANDLE_ERROR(cudaMemcpy(T_Result, dev_T_Last, nx * ny * nz* sizeof(float), cudaMemcpyDeviceToHost));
 			Calculation_MeanTemperature(nx, ny, nz, dy, ccml, T_Result);  // calculation the mean surface temperature of steel billets in every cooling sections
-			
-			if(PrintLabel==1)
-			{
-				printf("\n time_step = %d  simulation time is %f", i, i*tao);
-				printf("\nTSurface=\n");
+		
+				cout << "time_step = " << i <<",  "<< "simulation time = " << i * tao;
+				cout << endl << "TSurface = " << endl;
 				for (int temp = 0; temp < CoolSection; temp++)
-					printf("%f, ", Mean_TSurface[temp + MoldSection]);
+					cout << Mean_TSurface[temp + MoldSection] << ", ";
 
-				printf("\nTSurface - Taim=\n");
+				cout << endl << "TSurface - Taim = " << endl;
 				for (int temp = 0; temp < CoolSection; temp++)
-					printf("%f, ", Mean_TSurface[temp + MoldSection] - Taim[temp]);
-			}	
+					cout << (Mean_TSurface[temp + MoldSection] - Taim[temp]) << ", ";
 		}
 	}
 
-	if(PrintLabel==1)
-	{
-		fp = fopen("D:\\Temperature3DGPU_Static.txt", "w");
+	    
+	ofstream fout;
+		fout.open("D:\\Temperature3DGPUMPC_Static.txt");
 		for (int j = 0; j < ny; j++)
 		{
 			for (int i = 0; i < nx; i++)
 			{
 				for (int m = 0; m < nz; m++)
-					fprintf(fp, " %f", T_Result[nx * nz * j + i * nz + m]);
-				fprintf(fp, "\n");
+					fout << T_Result[nx * nz * j + i * nz + m] << ", ";
+				fout << endl;
 			}
-			fprintf(fp, "\n");
+			fout << endl;
 		}
-		fclose(fp);
+		fout.close();
 
-		fp = fopen("D:\\SurfaceTemperature3DGPU_Static.txt", "w");
+		fout.open("D:\\SurfaceTemperature3DGPUMPC_Static.txt");
 		for (int j = 0; j < ny; j++)
 		{
-			fprintf(fp, "%f", T_Result[nx * nz * j + 0 * nz + int((nx - 1) / 2)]);
-			fprintf(fp, "\n");
+			fout << T_Result[nx * nz * j + 0 * nz + int((nx - 1) / 2)] << ", ";
+			fout << endl;
 		}
-		fclose(fp);
-	}
+		fout.close();
 	
 
 	// Check for any errors launching the kernel
